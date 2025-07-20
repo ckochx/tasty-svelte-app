@@ -10,11 +10,16 @@
 
 <div class="min-h-screen bg-gray-50 py-8">
 	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-		<div class="mb-8">
-			<h1 class="text-3xl font-bold text-gray-900">Dashboard</h1>
-			{#if data.user}
-				<p class="mt-2 text-gray-600">Welcome back, {data.user.username}!</p>
-			{/if}
+		<div class="mb-8 flex items-center justify-between">
+			<div>
+				<h1 class="text-3xl font-bold text-gray-900">Dashboard</h1>
+				{#if data.user}
+					<p class="mt-2 text-gray-600">Welcome back, {data.user.username}!</p>
+				{/if}
+			</div>
+			<div class="flex-shrink-0">
+				<img src="/favicon.png" alt="Tasty App" class="h-12 w-12" />
+			</div>
 		</div>
 
 		{#if data.error}
