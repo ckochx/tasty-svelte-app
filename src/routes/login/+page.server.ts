@@ -63,7 +63,6 @@ export const actions: Actions = {
 
 			// Step 2: Skip OAuth for now - requires client registration
 			// Use session token directly (works immediately)
-			console.log('Using session token authentication (OAuth requires client registration)');
 
 			// Set session cookie
 			cookies.set('tastytrade_session', sessionToken, {
