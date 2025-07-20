@@ -26,6 +26,10 @@ export class StreamingMarketDataService {
 	private subscribedSymbols: Set<string> = new Set();
 	private onDataCallback: ((quote: StreamingQuote) => void) | null = null;
 	private onStatusCallback: ((connected: boolean, error?: string) => void) | null = null;
+	private isSetupComplete = false;
+	private isAuthorized = false;
+	private isFeedConfigured = false;
+	private pendingSymbols: string[] = [];
 
 	constructor() {
 		this.setupEventHandlers();
@@ -89,12 +93,8 @@ export class StreamingMarketDataService {
 	}
 
 	private async setupConnection(): Promise<void> {
-		// For DXLink protocol, start with SETUP
-		this.sendMessage({
-			type: 'SETUP',
-			keepaliveTimeout: 60,
-			acceptKeepaliveTimeout: 60
-		});
+		// For DXLink protocol, wait for server SETUP first, then respond
+		// The server will send SETUP first, and we respond in handleMessage
 	}
 
 	private handleMessage(message: DXLinkMessage): void {
@@ -102,15 +102,24 @@ export class StreamingMarketDataService {
 
 		switch (message.type) {
 			case 'SETUP':
-				// After SETUP, send AUTHORIZE
+				// Respond to server SETUP with our own SETUP, then AUTHORIZE
+				this.sendMessage({
+					type: 'SETUP',
+					channel: 0,
+					keepaliveTimeout: 60,
+					acceptKeepaliveTimeout: 60
+				});
+				this.isSetupComplete = true;
 				this.sendMessage({
 					type: 'AUTHORIZE',
+					channel: 0,
 					token: this.quoteToken
 				});
 				break;
 
 			case 'AUTHORIZE':
 				// After AUTHORIZE, request channel
+				this.isAuthorized = true;
 				this.sendMessage({
 					type: 'CHANNEL_REQUEST',
 					channel: this.channel,
@@ -125,8 +134,16 @@ export class StreamingMarketDataService {
 
 			case 'FEED_CONFIG':
 				// Feed configured, we can now subscribe to symbols
+				this.isFeedConfigured = true;
 				this.onStatusCallback?.(true);
 				this.startKeepalive();
+				
+				// Subscribe to any pending symbols
+				if (this.pendingSymbols.length > 0) {
+					console.log('Subscribing to pending symbols:', this.pendingSymbols);
+					this.subscribeToSymbols(this.pendingSymbols);
+					this.pendingSymbols = [];
+				}
 				break;
 
 			case 'FEED_DATA':
@@ -137,6 +154,12 @@ export class StreamingMarketDataService {
 			case 'KEEPALIVE':
 				// Respond to keepalive
 				this.sendMessage({ type: 'KEEPALIVE' });
+				break;
+
+			case 'ERROR':
+				// Handle error messages
+				console.error('DXLink Error:', message);
+				this.onStatusCallback?.(false, `${message.error}: ${message.message}`);
 				break;
 
 			default:
@@ -164,6 +187,12 @@ export class StreamingMarketDataService {
 			return;
 		}
 
+		if (!this.isFeedConfigured) {
+			console.log('Feed not configured yet, storing symbols for later subscription:', symbols);
+			this.pendingSymbols = [...new Set([...this.pendingSymbols, ...symbols])];
+			return;
+		}
+
 		const newSymbols = symbols.filter((symbol) => !this.subscribedSymbols.has(symbol));
 
 		if (newSymbols.length === 0) {
@@ -171,13 +200,25 @@ export class StreamingMarketDataService {
 		}
 
 		// Subscribe to Quote and Trade events for each symbol
+		// DXLink expects an array of subscription objects
+		const subscriptions: Array<{ type: string; symbol: string }> = [];
+
+		// Add Quote subscriptions
+		newSymbols.forEach((symbol) => {
+			subscriptions.push({
+				type: 'Quote',
+				symbol: symbol
+			});
+			subscriptions.push({
+				type: 'Trade',
+				symbol: symbol
+			});
+		});
+
 		const subscription = {
 			type: 'FEED_SUBSCRIPTION',
 			channel: this.channel,
-			add: {
-				Quote: newSymbols,
-				Trade: newSymbols
-			}
+			add: subscriptions
 		};
 
 		this.sendMessage(subscription);
@@ -189,13 +230,24 @@ export class StreamingMarketDataService {
 			return;
 		}
 
+		// DXLink expects an array of subscription objects
+		const subscriptions: Array<{ type: string; symbol: string }> = [];
+
+		symbols.forEach((symbol) => {
+			subscriptions.push({
+				type: 'Quote',
+				symbol: symbol
+			});
+			subscriptions.push({
+				type: 'Trade',
+				symbol: symbol
+			});
+		});
+
 		const subscription = {
 			type: 'FEED_SUBSCRIPTION',
 			channel: this.channel,
-			remove: {
-				Quote: symbols,
-				Trade: symbols
-			}
+			remove: subscriptions
 		};
 
 		this.sendMessage(subscription);
@@ -246,6 +298,7 @@ export class StreamingMarketDataService {
 
 	private sendMessage(message: Record<string, unknown>): void {
 		if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+			console.log('Sending message:', message);
 			this.ws.send(JSON.stringify(message));
 		}
 	}
@@ -259,7 +312,7 @@ export class StreamingMarketDataService {
 	}
 
 	isConnected(): boolean {
-		return this.ws?.readyState === WebSocket.OPEN;
+		return this.ws?.readyState === WebSocket.OPEN && this.isFeedConfigured;
 	}
 
 	disconnect(): void {
@@ -278,6 +331,10 @@ export class StreamingMarketDataService {
 		}
 
 		this.subscribedSymbols.clear();
+		this.pendingSymbols = [];
+		this.isSetupComplete = false;
+		this.isAuthorized = false;
+		this.isFeedConfigured = false;
 		this.onStatusCallback?.(false);
 	}
 
