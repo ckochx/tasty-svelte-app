@@ -202,44 +202,128 @@
 		{#if data.watchlists && data.watchlists.length > 0}
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
 				{#each data.watchlists as watchlist (watchlist.name)}
-					<div class="overflow-hidden rounded-lg bg-white shadow">
-						<div class="border-b border-gray-200 px-4 py-4 sm:px-6">
-							<div class="flex items-center justify-between">
-								<div>
-									<a
-										href="/watchlists/{encodeURIComponent(watchlist.name)}"
-										class="cursor-pointer text-lg font-medium text-indigo-600 hover:text-indigo-800 hover:underline"
-									>
-										{watchlist.name}
-									</a>
-									<p class="text-sm text-gray-500">
-										Group: {watchlist['group-name'] || 'main'} •
-										{watchlist['watchlist-entries']?.length || 0} symbols
-									</p>
-								</div>
-								<div class="flex space-x-2">
-									<button
-										onclick={() => toggleAddSymbolForm(watchlist.name)}
-										class="rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700"
-									>
-										Add Symbol
-									</button>
-									<form method="post" action="?/delete" use:enhance class="inline">
-										<input type="hidden" name="name" value={watchlist.name} />
-										<button
-											type="submit"
-											onclick={(e) => {
-												if (!confirm(`Are you sure you want to delete "${watchlist.name}"?`)) {
-													e.preventDefault();
-												}
-											}}
-											class="rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"
-										>
-											Delete
-										</button>
-									</form>
+					<div class="relative overflow-hidden rounded-lg bg-white shadow transition-shadow hover:shadow-lg">
+						<a href="/watchlists/{encodeURIComponent(watchlist.name)}" class="block h-full">
+							<div class="border-b border-gray-200 px-4 py-4 sm:px-6">
+								<div class="flex items-center justify-between">
+									<div>
+										<h3 class="text-lg font-medium text-indigo-600 hover:text-indigo-800">
+											{watchlist.name}
+										</h3>
+										<p class="text-sm text-gray-500">
+											Group: {watchlist['group-name'] || 'main'} •
+											{watchlist['watchlist-entries']?.length || 0} symbols
+										</p>
+									</div>
 								</div>
 							</div>
+
+							<!-- Watchlist Entries -->
+							<div class="px-4 py-4 sm:px-6">
+								{#if watchlist['watchlist-entries'] && watchlist['watchlist-entries'].length > 0}
+									<div class="space-y-3">
+										{#each watchlist['watchlist-entries'] as entry (entry.symbol)}
+											{@const quote = getQuote(entry.symbol, entry['instrument-type'])}
+											{@const priceChange = formatPriceChange(
+												quote?.['net-change'],
+												quote?.['net-change-percent']
+											)}
+											<div class="rounded-lg border border-gray-200 bg-white p-3">
+												<div class="flex items-start justify-between">
+													<div class="flex-1">
+														<div class="flex items-center space-x-2">
+															<span class="font-semibold text-gray-900">{entry.symbol}</span>
+															<span
+																class="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600"
+															>
+																{formatInstrumentType(entry['instrument-type'])}
+															</span>
+														</div>
+														{#if quote}
+															<div class="mt-2 grid grid-cols-2 gap-2 text-sm">
+																<div>
+																	<span class="text-gray-500">
+																		{data.marketStatus === 'Market Open' ? 'Last:' : 'Close:'}
+																	</span>
+																	<span class="ml-1 font-medium">
+																		{data.marketStatus === 'Market Open'
+																			? formatPrice(quote['last-price'])
+																			: formatPrice(quote['close-price'] || quote['last-price'])}
+																	</span>
+																</div>
+																<div>
+																	<span class="text-gray-500">Change:</span>
+																	<span class="ml-1 font-medium {priceChange.colorClass}"
+																		>{priceChange.value}</span
+																	>
+																</div>
+																<div>
+																	<span class="text-gray-500">Bid:</span>
+																	<span class="ml-1 font-medium">
+																		{data.marketStatus === 'Market Open'
+																			? formatPrice(quote['bid-price'])
+																			: quote['bid-price']
+																				? formatPrice(quote['bid-price'])
+																				: 'Closed'}
+																	</span>
+																</div>
+																<div>
+																	<span class="text-gray-500">Ask:</span>
+																	<span class="ml-1 font-medium">
+																		{data.marketStatus === 'Market Open'
+																			? formatPrice(quote['ask-price'])
+																			: quote['ask-price']
+																				? formatPrice(quote['ask-price'])
+																				: 'Closed'}
+																	</span>
+																</div>
+															</div>
+															{#if data.marketStatus !== 'Market Open' && quote['last-price'] && quote['close-price'] && quote['last-price'] !== quote['close-price']}
+																<div class="mt-2 text-xs text-gray-500">
+																	Last Trade: {formatPrice(quote['last-price'])}
+																</div>
+															{/if}
+														{:else}
+															<div class="mt-2 text-sm text-gray-500">Market data unavailable</div>
+														{/if}
+													</div>
+												</div>
+											</div>
+										{/each}
+									</div>
+								{:else}
+									<p class="text-center text-sm text-gray-500">No symbols in this watchlist</p>
+								{/if}
+							</div>
+						</a>
+						<div class="absolute top-4 right-4 z-10 flex space-x-2">
+							<button
+								onclick={(e) => {
+									e.stopPropagation();
+									e.preventDefault();
+									toggleAddSymbolForm(watchlist.name);
+								}}
+								class="rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 shadow-sm"
+							>
+								Add Symbol
+							</button>
+							<form method="post" action="?/delete" use:enhance class="inline">
+								<input type="hidden" name="name" value={watchlist.name} />
+								<button
+									type="submit"
+									onclick={(e) => {
+										e.stopPropagation();
+										e.preventDefault();
+										if (!confirm(`Are you sure you want to delete "${watchlist.name}"?`)) {
+											return;
+										}
+										e.target.closest('form').submit();
+									}}
+									class="rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 shadow-sm"
+								>
+									Delete
+								</button>
+							</form>
 						</div>
 
 						<!-- Add Symbol Form -->
@@ -285,112 +369,6 @@
 							</div>
 						{/if}
 
-						<!-- Watchlist Entries -->
-						<div class="px-4 py-4 sm:px-6">
-							{#if watchlist['watchlist-entries'] && watchlist['watchlist-entries'].length > 0}
-								<div class="space-y-3">
-									{#each watchlist['watchlist-entries'] as entry (entry.symbol)}
-										{@const quote = getQuote(entry.symbol, entry['instrument-type'])}
-										{@const priceChange = formatPriceChange(
-											quote?.['net-change'],
-											quote?.['net-change-percent']
-										)}
-										<div class="rounded-lg border border-gray-200 bg-white p-3">
-											<div class="flex items-start justify-between">
-												<div class="flex-1">
-													<div class="flex items-center space-x-2">
-														<span class="font-semibold text-gray-900">{entry.symbol}</span>
-														<span
-															class="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600"
-														>
-															{formatInstrumentType(entry['instrument-type'])}
-														</span>
-													</div>
-													{#if quote}
-														<div class="mt-2 grid grid-cols-2 gap-2 text-sm">
-															<div>
-																<span class="text-gray-500">
-																	{data.marketStatus === 'Market Open' ? 'Last:' : 'Close:'}
-																</span>
-																<span class="ml-1 font-medium">
-																	{data.marketStatus === 'Market Open'
-																		? formatPrice(quote['last-price'])
-																		: formatPrice(quote['close-price'] || quote['last-price'])}
-																</span>
-															</div>
-															<div>
-																<span class="text-gray-500">Change:</span>
-																<span class="ml-1 font-medium {priceChange.colorClass}"
-																	>{priceChange.value}</span
-																>
-															</div>
-															<div>
-																<span class="text-gray-500">Bid:</span>
-																<span class="ml-1 font-medium">
-																	{data.marketStatus === 'Market Open'
-																		? formatPrice(quote['bid-price'])
-																		: quote['bid-price']
-																			? formatPrice(quote['bid-price'])
-																			: 'Closed'}
-																</span>
-															</div>
-															<div>
-																<span class="text-gray-500">Ask:</span>
-																<span class="ml-1 font-medium">
-																	{data.marketStatus === 'Market Open'
-																		? formatPrice(quote['ask-price'])
-																		: quote['ask-price']
-																			? formatPrice(quote['ask-price'])
-																			: 'Closed'}
-																</span>
-															</div>
-														</div>
-														{#if data.marketStatus !== 'Market Open' && quote['last-price'] && quote['close-price'] && quote['last-price'] !== quote['close-price']}
-															<div class="mt-2 text-xs text-gray-500">
-																Last Trade: {formatPrice(quote['last-price'])}
-															</div>
-														{/if}
-													{:else}
-														<div class="mt-2 text-sm text-gray-500">Market data unavailable</div>
-													{/if}
-												</div>
-												<form method="post" action="?/removeSymbol" use:enhance class="ml-3">
-													<input type="hidden" name="watchlistName" value={watchlist.name} />
-													<input type="hidden" name="symbol" value={entry.symbol} />
-													<input
-														type="hidden"
-														name="instrumentType"
-														value={entry['instrument-type']}
-													/>
-													<button
-														type="submit"
-														class="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800"
-														title="Remove symbol"
-														aria-label="Remove symbol"
-													>
-														<svg
-															class="h-4 w-4"
-															fill="none"
-															viewBox="0 0 24 24"
-															stroke="currentColor"
-														>
-															<path
-																stroke-linecap="round"
-																stroke-linejoin="round"
-																stroke-width="2"
-																d="M6 18L18 6M6 6l12 12"
-															/>
-														</svg>
-													</button>
-												</form>
-											</div>
-										</div>
-									{/each}
-								</div>
-							{:else}
-								<p class="text-center text-sm text-gray-500">No symbols in this watchlist</p>
-							{/if}
-						</div>
 					</div>
 				{/each}
 			</div>
