@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { onMount, onDestroy } from 'svelte';
+	import { streamingStore, connectionStatus } from '$lib/stores/streaming';
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -10,6 +12,19 @@
 	let editGroupName = $state(data.watchlist['group-name'] || 'main');
 	let addSymbol = $state('');
 	let addInstrumentType = $state('Equity');
+	
+	// Streaming state
+	let streamingMode = $state(false);
+	let pollingInterval: number | undefined;
+	
+	// Local quotes state for client-side updates
+	let localQuotes = $state(data.quotes);
+	
+	// Reactive quotes - merge polling and streaming data - access store reactively
+	let mergedQuotes = $derived.by(() => {
+		// This will be reactive to streamingStore changes
+		return streamingStore.mergeQuotes(localQuotes);
+	});
 
 	function toggleEditForm() {
 		showEditForm = !showEditForm;
@@ -51,9 +66,7 @@
 
 	function getQuote(symbol: string, instrumentType: string | undefined) {
 		const key = `${symbol}-${instrumentType || 'Equity'}`;
-		const quote = data.quotes?.get(key);
-		
-		
+		const quote = mergedQuotes?.get(key);
 		return quote;
 	}
 
@@ -86,6 +99,92 @@
 			colorClass: change >= 0 ? 'text-green-600' : 'text-red-600'
 		};
 	}
+
+	async function toggleStreamingMode() {
+		console.log('Toggle streaming mode clicked, current mode:', streamingMode);
+		
+		if (streamingMode) {
+			// Switch to polling mode
+			console.log('Switching to polling mode');
+			streamingMode = false;
+			streamingStore.setMode('polling');
+			streamingStore.disconnect();
+			startPolling();
+		} else {
+			// Switch to streaming mode
+			console.log('Switching to streaming mode');
+			stopPolling();
+			streamingMode = true;
+			streamingStore.setMode('streaming');
+			
+			console.log('Attempting to connect to streaming...');
+			const connected = await streamingStore.connect();
+			console.log('Streaming connection result:', connected);
+			
+			if (connected) {
+				// Subscribe to all symbols in the watchlist
+				const symbols = (data.watchlist['watchlist-entries'] || []).map(entry => entry.symbol);
+				console.log('Subscribing to symbols:', symbols);
+				streamingStore.subscribeToSymbols(symbols);
+			} else {
+				// Fall back to polling if streaming fails
+				console.log('Streaming failed, falling back to polling');
+				streamingMode = false;
+				streamingStore.setMode('polling');
+				startPolling();
+			}
+		}
+	}
+
+	async function fetchQuotesClient() {
+		try {
+			const symbols = (data.watchlist['watchlist-entries'] || []).map(entry => entry.symbol);
+			if (symbols.length === 0) return;
+			
+			// Fetch quotes using client-side API call
+			const response = await fetch('/api/quotes', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ symbols: symbols.map(s => ({ symbol: s, instrumentType: 'Equity' })) })
+			});
+			
+			if (response.ok) {
+				const result = await response.json();
+				// Update the local quotes state reactively without page reload
+				if (result.quotes) {
+					localQuotes = new Map(result.quotes.map((q: any) => [`${q.symbol}-${q['instrument-type']}`, q]));
+				}
+			}
+		} catch (error) {
+			console.error('Failed to fetch quotes:', error);
+		}
+	}
+
+	function startPolling() {
+		stopPolling();
+		// Refresh data every 30 seconds in polling mode
+		pollingInterval = setInterval(async () => {
+			await fetchQuotesClient();
+		}, 30000);
+	}
+
+	function stopPolling() {
+		if (pollingInterval) {
+			clearInterval(pollingInterval);
+			pollingInterval = undefined;
+		}
+	}
+
+	onMount(() => {
+		streamingStore.init();
+		// Start with polling mode
+		startPolling();
+	});
+
+	onDestroy(() => {
+		stopPolling();
+		streamingStore.disconnect();
+	});
 </script>
 
 <svelte:head>
@@ -161,13 +260,56 @@
 						{/if}
 					</div>
 				</div>
-				<div class="flex space-x-3">
-					<button
-						onclick={toggleAddSymbolForm}
-						class="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:outline-none"
-					>
-						{showAddSymbolForm ? 'Cancel' : 'Add Symbol'}
-					</button>
+				<div class="flex items-center space-x-4">
+					<!-- Connection Status -->
+					{#if $connectionStatus.error}
+						<div class="text-sm text-red-600">
+							Error: {$connectionStatus.error}
+						</div>
+					{:else if streamingMode && $connectionStatus.connected}
+						<div class="flex items-center text-sm text-green-600">
+							<div class="h-2 w-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+							Streaming Live
+						</div>
+					{:else if streamingMode}
+						<div class="flex items-center text-sm text-yellow-600">
+							<div class="h-2 w-2 bg-yellow-500 rounded-full mr-2"></div>
+							Connecting...
+						</div>
+					{:else}
+						<div class="flex items-center text-sm text-gray-600">
+							<div class="h-2 w-2 bg-gray-400 rounded-full mr-2"></div>
+							Polling (30s)
+						</div>
+					{/if}
+					
+					<!-- Toggle Button -->
+					<div class="flex items-center space-x-2">
+						<button
+							type="button"
+							onclick={toggleStreamingMode}
+							class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 {streamingMode ? 'bg-indigo-600' : 'bg-gray-200'}"
+							role="switch"
+							aria-checked={streamingMode}
+							aria-labelledby="streaming-toggle-label"
+						>
+							<span
+								aria-hidden="true"
+								class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {streamingMode ? 'translate-x-5' : 'translate-x-0'}"
+							></span>
+						</button>
+						<span class="text-sm font-medium text-gray-700" id="streaming-toggle-label">
+							Streaming
+						</span>
+					</div>
+					
+					<div class="flex space-x-3">
+						<button
+							onclick={toggleAddSymbolForm}
+							class="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:outline-none"
+						>
+							{showAddSymbolForm ? 'Cancel' : 'Add Symbol'}
+						</button>
 					<button
 						onclick={toggleEditForm}
 						class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:outline-none"
@@ -187,6 +329,7 @@
 							Delete Watchlist
 						</button>
 					</form>
+					</div>
 				</div>
 			</div>
 		</div>
