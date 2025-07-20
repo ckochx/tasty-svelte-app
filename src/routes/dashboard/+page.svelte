@@ -150,6 +150,7 @@
 					<div class="ml-4">
 						<h3 class="text-lg font-medium text-gray-900">Market Data</h3>
 						<p class="text-sm text-gray-600">View real-time market data</p>
+						<p class="text-xs text-gray-500 italic">Not implemented yet</p>
 					</div>
 				</div>
 			</div>
@@ -174,6 +175,7 @@
 					<div class="ml-4">
 						<h3 class="text-lg font-medium text-gray-900">Trading</h3>
 						<p class="text-sm text-gray-600">Place and manage orders</p>
+						<p class="text-xs text-gray-500 italic">Not implemented yet</p>
 					</div>
 				</div>
 			</div>
