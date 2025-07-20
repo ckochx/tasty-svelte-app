@@ -99,12 +99,17 @@
 					{/if}
 				</div>
 			</div>
-			<button
-				onclick={toggleCreateForm}
-				class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:outline-none"
-			>
-				{showCreateForm ? 'Cancel' : 'Create Watchlist'}
-			</button>
+			<div class="flex items-center space-x-4">
+				<button
+					onclick={toggleCreateForm}
+					class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:outline-none"
+				>
+					{showCreateForm ? 'Cancel' : 'Create Watchlist'}
+				</button>
+				<div class="flex-shrink-0">
+					<img src="/favicon.png" alt="Tasty App" class="h-12 w-12" />
+				</div>
+			</div>
 		</div>
 
 		<!-- Success/Error Messages -->

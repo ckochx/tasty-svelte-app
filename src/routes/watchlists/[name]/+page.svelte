@@ -339,6 +339,10 @@
 							</button>
 						</form>
 					</div>
+
+					<div class="flex-shrink-0">
+						<img src="/favicon.png" alt="Tasty App" class="h-12 w-12" />
+					</div>
 				</div>
 			</div>
 		</div>
