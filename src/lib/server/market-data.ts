@@ -107,8 +107,7 @@ export class MarketDataManager {
 			}
 
 			const data: MarketDataResponse = await response.json();
-			
-			
+
 			return data.data.items || [];
 		} catch (error) {
 			console.error('Error fetching market data:', error);

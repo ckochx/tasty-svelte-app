@@ -206,9 +206,9 @@
 						<div class="border-b border-gray-200 px-4 py-4 sm:px-6">
 							<div class="flex items-center justify-between">
 								<div>
-									<a 
+									<a
 										href="/watchlists/{encodeURIComponent(watchlist.name)}"
-										class="text-lg font-medium text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
+										class="cursor-pointer text-lg font-medium text-indigo-600 hover:text-indigo-800 hover:underline"
 									>
 										{watchlist.name}
 									</a>

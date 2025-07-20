@@ -4,7 +4,8 @@
 			"Bash(npm run dev:*)",
 			"Bash(git add:*)",
 			"Bash(npm run check:*)",
-			"WebFetch(domain:developer.tastytrade.com)"
+			"WebFetch(domain:developer.tastytrade.com)",
+			"Bash(git commit:*)"
 		],
 		"deny": []
 	}

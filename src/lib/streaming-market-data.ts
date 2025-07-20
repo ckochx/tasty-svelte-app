@@ -7,7 +7,7 @@ export interface StreamingQuote extends Quote {
 export interface DXLinkMessage {
 	type: string;
 	channel?: number;
-	data?: any;
+	data?: unknown;
 }
 
 export interface StreamingDataStore {
@@ -22,7 +22,7 @@ export class StreamingMarketDataService {
 	private quoteToken: string | null = null;
 	private dxlinkUrl: string | null = null;
 	private channel = 1;
-	private keepaliveInterval: number | null = null;
+	private keepaliveInterval: ReturnType<typeof setInterval> | null = null;
 	private subscribedSymbols: Set<string> = new Set();
 	private onDataCallback: ((quote: StreamingQuote) => void) | null = null;
 	private onStatusCallback: ((connected: boolean, error?: string) => void) | null = null;
@@ -40,7 +40,7 @@ export class StreamingMarketDataService {
 		try {
 			this.ws = new WebSocket(this.dxlinkUrl);
 			this.setupWebSocketHandlers();
-			
+
 			return new Promise((resolve) => {
 				const timeout = setTimeout(() => {
 					this.onStatusCallback?.(false, 'Connection timeout');
@@ -99,7 +99,7 @@ export class StreamingMarketDataService {
 
 	private handleMessage(message: DXLinkMessage): void {
 		console.log('Received message:', message);
-		
+
 		switch (message.type) {
 			case 'SETUP':
 				// After SETUP, send AUTHORIZE
@@ -164,8 +164,8 @@ export class StreamingMarketDataService {
 			return;
 		}
 
-		const newSymbols = symbols.filter(symbol => !this.subscribedSymbols.has(symbol));
-		
+		const newSymbols = symbols.filter((symbol) => !this.subscribedSymbols.has(symbol));
+
 		if (newSymbols.length === 0) {
 			return;
 		}
@@ -181,7 +181,7 @@ export class StreamingMarketDataService {
 		};
 
 		this.sendMessage(subscription);
-		newSymbols.forEach(symbol => this.subscribedSymbols.add(symbol));
+		newSymbols.forEach((symbol) => this.subscribedSymbols.add(symbol));
 	}
 
 	unsubscribeFromSymbols(symbols: string[]): void {
@@ -199,16 +199,16 @@ export class StreamingMarketDataService {
 		};
 
 		this.sendMessage(subscription);
-		symbols.forEach(symbol => this.subscribedSymbols.delete(symbol));
+		symbols.forEach((symbol) => this.subscribedSymbols.delete(symbol));
 	}
 
-	private handleMarketData(data: any): void {
+	private handleMarketData(data: unknown): void {
 		if (!data || !Array.isArray(data)) {
 			return;
 		}
 
-		data.forEach((event: any) => {
-			if (!event.eventSymbol) return;
+		data.forEach((event: Record<string, unknown>) => {
+			if (!event.eventSymbol || typeof event.eventSymbol !== 'string') return;
 
 			const symbol = event.eventSymbol;
 			const quote: StreamingQuote = {
@@ -217,18 +217,19 @@ export class StreamingMarketDataService {
 				timestamp: Date.now()
 			};
 
-			// Map DXLink fields to our Quote interface
+			// Map DXLink fields to our Quote interface with type guards
 			if (event.eventType === 'Quote') {
-				quote['bid-price'] = event.bidPrice;
-				quote['ask-price'] = event.askPrice;
-				quote['bid-size'] = event.bidSize;
-				quote['ask-size'] = event.askSize;
+				quote['bid-price'] = typeof event.bidPrice === 'number' ? event.bidPrice : undefined;
+				quote['ask-price'] = typeof event.askPrice === 'number' ? event.askPrice : undefined;
+				quote['bid-size'] = typeof event.bidSize === 'number' ? event.bidSize : undefined;
+				quote['ask-size'] = typeof event.askSize === 'number' ? event.askSize : undefined;
 			} else if (event.eventType === 'Trade') {
-				quote['last-price'] = event.price;
-				quote['last-size'] = event.size;
-				quote.volume = event.dayVolume;
-				quote['net-change'] = event.change;
-				quote['net-change-percent'] = event.changePercent;
+				quote['last-price'] = typeof event.price === 'number' ? event.price : undefined;
+				quote['last-size'] = typeof event.size === 'number' ? event.size : undefined;
+				quote.volume = typeof event.dayVolume === 'number' ? event.dayVolume : undefined;
+				quote['net-change'] = typeof event.change === 'number' ? event.change : undefined;
+				quote['net-change-percent'] =
+					typeof event.changePercent === 'number' ? event.changePercent : undefined;
 			}
 
 			this.onDataCallback?.(quote);
@@ -236,14 +237,14 @@ export class StreamingMarketDataService {
 	}
 
 	private startKeepalive(): void {
-		this.keepaliveInterval = window.setInterval(() => {
+		this.keepaliveInterval = setInterval(() => {
 			if (this.ws && this.ws.readyState === WebSocket.OPEN) {
 				this.sendMessage({ type: 'KEEPALIVE' });
 			}
 		}, 30000); // Send keepalive every 30 seconds
 	}
 
-	private sendMessage(message: any): void {
+	private sendMessage(message: Record<string, unknown>): void {
 		if (this.ws && this.ws.readyState === WebSocket.OPEN) {
 			this.ws.send(JSON.stringify(message));
 		}
