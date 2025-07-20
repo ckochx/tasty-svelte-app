@@ -206,7 +206,12 @@
 						<div class="border-b border-gray-200 px-4 py-4 sm:px-6">
 							<div class="flex items-center justify-between">
 								<div>
-									<h3 class="text-lg font-medium text-gray-900">{watchlist.name}</h3>
+									<a 
+										href="/watchlists/{encodeURIComponent(watchlist.name)}"
+										class="text-lg font-medium text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
+									>
+										{watchlist.name}
+									</a>
 									<p class="text-sm text-gray-500">
 										Group: {watchlist['group-name'] || 'main'} •
 										{watchlist['watchlist-entries']?.length || 0} symbols
