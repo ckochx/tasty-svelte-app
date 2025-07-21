@@ -2,17 +2,27 @@
 
 Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
 
-## Creating a project
+## Getting setup:
 
-If you're seeing this, you've probably already done this step. Congrats!
+1. Start the database:
+npm run db:start
+2. Set environment variable:
+export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/tasty-app"
+2. Or add it to your .env file:
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tasty-app
+3. Push the schema:
+npm run db:push
+4. Optional: Open Drizzle Studio (database GUI):
+npm run db:studio
 
-```bash
-# create a new project in the current directory
-npx sv create
+Key Points:
 
-# create a new project in my-app
-npx sv create my-app
-```
+- The project uses Drizzle ORM with PostgreSQL
+- Docker Compose provides the database (user: postgres, password: postgres, db: tasty-app)
+- Schema defines user and session tables for authentication
+- db:push is fastest for development, db:migrate is better for production
+
+Quick start: npm run db:start then npm run db:push should get you running! 🚀
 
 ## Developing
 
