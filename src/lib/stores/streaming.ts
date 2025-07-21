@@ -41,10 +41,13 @@ function createStreamingStore() {
 
 			// Handle incoming data
 			streamingService.onData((quote: StreamingQuote) => {
+				console.log('Streaming store received quote:', quote);
 				update((state) => {
 					const key = `${quote.symbol}-${quote['instrument-type']}`;
+					console.log('Updating streaming store with key:', key);
 					state.quotes.set(key, quote);
 					state.lastUpdate = Date.now();
+					console.log('Streaming store updated, quotes size:', state.quotes.size);
 					return state;
 				});
 			});
@@ -144,29 +147,41 @@ function createStreamingStore() {
 		// Merge streaming quotes with polling quotes
 		mergeQuotes: (pollingQuotes: Map<string, Quote>): Map<string, Quote> => {
 			const state = get({ subscribe });
+			console.log('mergeQuotes called, streaming state:', {
+				mode: state.mode,
+				connected: state.connected,
+				quotesSize: state.quotes.size,
+				lastUpdate: state.lastUpdate
+			});
 			const merged = new Map(pollingQuotes);
 
 			// If in streaming mode and connected, prefer streaming data
 			if (state.mode === 'streaming' && state.connected) {
+				console.log('Merging streaming quotes:', Array.from(state.quotes.keys()));
 				state.quotes.forEach((streamingQuote, key) => {
 					const existingQuote = merged.get(key);
 					if (existingQuote) {
 						// Merge streaming data with existing quote data
-						merged.set(key, {
+						const mergedQuote = {
 							...existingQuote,
 							...streamingQuote,
 							'updated-at': new Date(streamingQuote.timestamp || Date.now()).toISOString()
-						});
+						};
+						console.log(`Merging ${key}:`, mergedQuote);
+						merged.set(key, mergedQuote);
 					} else {
 						// Add new streaming quote
-						merged.set(key, {
+						const newQuote = {
 							...streamingQuote,
 							'updated-at': new Date(streamingQuote.timestamp || Date.now()).toISOString()
-						});
+						};
+						console.log(`Adding new ${key}:`, newQuote);
+						merged.set(key, newQuote);
 					}
 				});
 			}
 
+			console.log('Final merged quotes size:', merged.size);
 			return merged;
 		}
 	};

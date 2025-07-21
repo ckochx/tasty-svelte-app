@@ -190,6 +190,7 @@ export class StreamingMarketDataService {
 
 			case 'FEED_DATA':
 				// Handle market data
+				console.log(`[${this.instanceId}] Received FEED_DATA:`, message.data);
 				this.handleMarketData(message.data);
 				break;
 
@@ -301,33 +302,64 @@ export class StreamingMarketDataService {
 			return;
 		}
 
-		data.forEach((event: Record<string, unknown>) => {
-			if (!event.eventSymbol || typeof event.eventSymbol !== 'string') return;
+		// DXLink compact format: [eventType, [symbol1, field1, field2, ..., symbol2, field1, field2, ...]]
+		const eventType = data[0];
+		const eventData = data[1];
 
-			const symbol = event.eventSymbol;
-			const quote: StreamingQuote = {
-				symbol,
-				'instrument-type': 'Equity', // Default, could be enhanced
-				timestamp: Date.now()
-			};
+		if (!Array.isArray(eventData)) {
+			return;
+		}
 
-			// Map DXLink fields to our Quote interface with type guards
-			if (event.eventType === 'Quote') {
-				quote['bid-price'] = typeof event.bidPrice === 'number' ? event.bidPrice : undefined;
-				quote['ask-price'] = typeof event.askPrice === 'number' ? event.askPrice : undefined;
-				quote['bid-size'] = typeof event.bidSize === 'number' ? event.bidSize : undefined;
-				quote['ask-size'] = typeof event.askSize === 'number' ? event.askSize : undefined;
-			} else if (event.eventType === 'Trade') {
-				quote['last-price'] = typeof event.price === 'number' ? event.price : undefined;
-				quote['last-size'] = typeof event.size === 'number' ? event.size : undefined;
-				quote.volume = typeof event.dayVolume === 'number' ? event.dayVolume : undefined;
-				quote['net-change'] = typeof event.change === 'number' ? event.change : undefined;
-				quote['net-change-percent'] =
-					typeof event.changePercent === 'number' ? event.changePercent : undefined;
+		// Parse compact format based on event type
+		if (eventType === 'Trade') {
+			// Trade format: [symbol, price, size, volume, change, symbol2, price2, ...]
+			for (let i = 0; i < eventData.length; i += 5) {
+				const symbol = eventData[i];
+				const price = eventData[i + 1];
+				const size = eventData[i + 2];
+				const volume = eventData[i + 3];
+				const change = eventData[i + 4];
+
+				if (typeof symbol === 'string') {
+					const quote: StreamingQuote = {
+						symbol,
+						'instrument-type': 'Equity',
+						'last-price': typeof price === 'number' ? price : undefined,
+						'last-size': typeof size === 'number' ? size : undefined,
+						volume: typeof volume === 'number' ? volume : undefined,
+						'net-change': typeof change === 'number' ? change : undefined,
+						timestamp: Date.now()
+					};
+
+					console.log(`[${this.instanceId}] Streaming update for ${symbol}:`, quote);
+					this.onDataCallback?.(quote);
+				}
 			}
+		} else if (eventType === 'Quote') {
+			// Quote format: [symbol, bidPrice, askPrice, bidSize, askSize, symbol2, ...]
+			for (let i = 0; i < eventData.length; i += 5) {
+				const symbol = eventData[i];
+				const bidPrice = eventData[i + 1];
+				const askPrice = eventData[i + 2];
+				const bidSize = eventData[i + 3];
+				const askSize = eventData[i + 4];
 
-			this.onDataCallback?.(quote);
-		});
+				if (typeof symbol === 'string') {
+					const quote: StreamingQuote = {
+						symbol,
+						'instrument-type': 'Equity',
+						'bid-price': typeof bidPrice === 'number' ? bidPrice : undefined,
+						'ask-price': typeof askPrice === 'number' ? askPrice : undefined,
+						'bid-size': typeof bidSize === 'number' ? bidSize : undefined,
+						'ask-size': typeof askSize === 'number' ? askSize : undefined,
+						timestamp: Date.now()
+					};
+
+					console.log(`[${this.instanceId}] Streaming update for ${symbol}:`, quote);
+					this.onDataCallback?.(quote);
+				}
+			}
+		}
 	}
 
 	private startKeepalive(): void {

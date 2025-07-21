@@ -4,6 +4,7 @@
 	import { streamingStore, connectionStatus } from '$lib/stores/streaming';
 	import type { Quote } from '$lib/server/market-data';
 	import type { PageData, ActionData } from './$types';
+	import { SvelteMap } from 'svelte/reactivity';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -21,10 +22,37 @@
 	// Local quotes state for client-side updates
 	let localQuotes = $state(data.quotes);
 
-	// Reactive quotes - merge polling and streaming data - access store reactively
+	// Reactive quotes - merge polling and streaming data
 	let mergedQuotes = $derived.by(() => {
-		// This will be reactive to streamingStore changes
-		return streamingStore.mergeQuotes(localQuotes);
+		const streamingState = $streamingStore;
+		console.log('UI mergedQuotes recalculating, streaming state:', streamingState);
+
+		// Create a new merged map
+		const merged = new SvelteMap(localQuotes);
+
+		// If in streaming mode and connected, prefer streaming data
+		if (streamingState.mode === 'streaming' && streamingState.connected) {
+			console.log('UI merging streaming quotes, count:', streamingState.quotes.size);
+			streamingState.quotes.forEach((streamingQuote, key) => {
+				const existingQuote = merged.get(key);
+				if (existingQuote) {
+					// Merge streaming data with existing quote data
+					merged.set(key, {
+						...existingQuote,
+						...streamingQuote,
+						'updated-at': new Date(streamingQuote.timestamp || Date.now()).toISOString()
+					});
+				} else {
+					// Add new streaming quote
+					merged.set(key, {
+						...streamingQuote,
+						'updated-at': new Date(streamingQuote.timestamp || Date.now()).toISOString()
+					});
+				}
+			});
+		}
+
+		return merged;
 	});
 
 	function toggleEditForm() {
