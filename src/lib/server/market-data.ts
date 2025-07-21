@@ -50,14 +50,17 @@ export class MarketDataManager {
 	// GET /api-quote-tokens - Get API quote token for streaming (24-hour validity)
 	async getQuoteToken(): Promise<QuoteToken | null> {
 		try {
+			console.log('Attempting to fetch quote token from /api-quote-tokens');
 			const response = await this.auth.makeAuthenticatedRequest('/api-quote-tokens');
 
 			if (!response.ok) {
-				console.error('Failed to fetch quote token:', response.status);
+				const errorText = await response.text();
+				console.error('Failed to fetch quote token:', response.status, errorText);
 				return null;
 			}
 
 			const data: QuoteTokenResponse = await response.json();
+			console.log('Quote token response:', data);
 			return data.data;
 		} catch (error) {
 			console.error('Error fetching quote token:', error);
@@ -75,7 +78,7 @@ export class MarketDataManager {
 
 		// Since the API returns single quotes, fetch each symbol individually
 		const quotes: Quote[] = [];
-		
+
 		for (const { symbol, instrumentType } of symbolsWithTypes) {
 			try {
 				const quote = await this.getSingleQuote(symbol, instrumentType);
@@ -132,7 +135,7 @@ export class MarketDataManager {
 	}
 
 	// Map API response fields to our Quote interface
-	private mapApiQuoteToQuote(apiQuote: any): Quote {
+	private mapApiQuoteToQuote(apiQuote: Record<string, unknown>): Quote {
 		return {
 			symbol: apiQuote.symbol,
 			'instrument-type': apiQuote['instrument-type'] || 'Equity',
@@ -148,13 +151,17 @@ export class MarketDataManager {
 			'mark-price': parseFloat(apiQuote.mark) || undefined,
 			'updated-at': apiQuote['updated-at'] || undefined,
 			// Calculate net change if we have last and prev-close
-			'net-change': apiQuote.last && apiQuote['prev-close'] 
-				? parseFloat(apiQuote.last) - parseFloat(apiQuote['prev-close']) 
-				: undefined,
+			'net-change':
+				apiQuote.last && apiQuote['prev-close']
+					? parseFloat(apiQuote.last) - parseFloat(apiQuote['prev-close'])
+					: undefined,
 			// Calculate percentage change
-			'net-change-percent': apiQuote.last && apiQuote['prev-close'] 
-				? ((parseFloat(apiQuote.last) - parseFloat(apiQuote['prev-close'])) / parseFloat(apiQuote['prev-close'])) * 100
-				: undefined
+			'net-change-percent':
+				apiQuote.last && apiQuote['prev-close']
+					? ((parseFloat(apiQuote.last) - parseFloat(apiQuote['prev-close'])) /
+							parseFloat(apiQuote['prev-close'])) *
+						100
+					: undefined
 		};
 	}
 

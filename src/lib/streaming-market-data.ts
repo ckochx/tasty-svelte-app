@@ -30,16 +30,27 @@ export class StreamingMarketDataService {
 	private isAuthorized = false;
 	private isFeedConfigured = false;
 	private pendingSymbols: string[] = [];
+	private instanceId: string;
+	private connectionToken: string | null = null; // Backup token storage
 
 	constructor() {
+		this.instanceId = Math.random().toString(36).substring(7);
+		console.log(`StreamingMarketDataService constructor called - instance ${this.instanceId}`);
 		this.setupEventHandlers();
 	}
 
 	async connect(quoteToken: string, dxlinkUrl: string): Promise<boolean> {
+		console.log(
+			`[${this.instanceId}] connect() called with token:`,
+			quoteToken ? `${quoteToken.substring(0, 20)}...` : 'NULL/UNDEFINED'
+		);
 		this.quoteToken = quoteToken;
+		this.connectionToken = quoteToken; // Store backup copy
+		console.log(`[${this.instanceId}] Stored token in both locations`);
+
 		// Use the API-provided dxlink-url for market data streaming
 		this.dxlinkUrl = dxlinkUrl;
-		console.log('Connecting to WebSocket URL:', this.dxlinkUrl);
+		console.log(`[${this.instanceId}] Connecting to WebSocket URL:`, this.dxlinkUrl);
 
 		try {
 			this.ws = new WebSocket(this.dxlinkUrl);
@@ -52,6 +63,10 @@ export class StreamingMarketDataService {
 				}, 10000);
 
 				this.ws!.onopen = () => {
+					console.log(
+						`[${this.instanceId}] WebSocket opened, token check:`,
+						this.quoteToken ? 'PRESENT' : 'MISSING'
+					);
 					clearTimeout(timeout);
 					this.setupConnection();
 					resolve(true);
@@ -71,6 +86,7 @@ export class StreamingMarketDataService {
 
 	private setupWebSocketHandlers(): void {
 		if (!this.ws) return;
+		console.log('Setting up WebSocket handlers');
 
 		this.ws.onmessage = (event) => {
 			try {
@@ -82,49 +98,75 @@ export class StreamingMarketDataService {
 		};
 
 		this.ws.onclose = () => {
+			console.log('WebSocket connection closed');
 			this.onStatusCallback?.(false, 'Connection closed');
 			this.cleanup();
 		};
 
 		this.ws.onerror = (error) => {
+			console.log('WebSocket error occurred');
 			this.onStatusCallback?.(false, 'WebSocket error');
 			console.error('WebSocket error:', error);
 		};
 	}
 
 	private async setupConnection(): Promise<void> {
-		// For DXLink protocol, wait for server SETUP first, then respond
-		// The server will send SETUP first, and we respond in handleMessage
+		// For DXLink protocol, initiate SETUP handshake
+		console.log(`[${this.instanceId}] Initiating SETUP handshake`);
+		this.sendMessage({
+			type: 'SETUP',
+			version: '0.1-1.0.0',
+			channel: 0,
+			keepaliveTimeout: 60,
+			acceptKeepaliveTimeout: 60
+		});
 	}
 
 	private handleMessage(message: DXLinkMessage): void {
-		console.log('Received message:', message);
+		console.log('RECEIVED:', message.type, message);
 
 		switch (message.type) {
-			case 'SETUP':
-				// Respond to server SETUP with our own SETUP, then AUTHORIZE
-				this.sendMessage({
-					type: 'SETUP',
-					channel: 0,
-					keepaliveTimeout: 60,
-					acceptKeepaliveTimeout: 60
-				});
+			case 'SETUP': {
+				// Server responded to our SETUP, now send AUTH
+				console.log(`[${this.instanceId}] Server acknowledged SETUP, sending AUTH`);
 				this.isSetupComplete = true;
-				this.sendMessage({
-					type: 'AUTHORIZE',
+
+				if (!this.quoteToken) {
+					console.error(`[${this.instanceId}] ERROR: No quote token available for AUTH`);
+					this.onStatusCallback?.(false, 'No quote token available');
+					return;
+				}
+
+				const authMessage = {
+					type: 'AUTH',
 					channel: 0,
 					token: this.quoteToken
-				});
+				};
+				console.log(`[${this.instanceId}] Sending AUTH with token`);
+				this.sendMessage(authMessage);
 				break;
+			}
 
-			case 'AUTHORIZE':
-				// After AUTHORIZE, request channel
-				this.isAuthorized = true;
-				this.sendMessage({
-					type: 'CHANNEL_REQUEST',
-					channel: this.channel,
-					service: 'FEED'
-				});
+			case 'AUTH':
+			case 'AUTH_STATE':
+				// Check AUTH state
+				if (message.state === 'AUTHORIZED') {
+					console.log('Authentication successful');
+					this.isAuthorized = true;
+					this.sendMessage({
+						type: 'CHANNEL_REQUEST',
+						channel: this.channel,
+						service: 'FEED',
+						parameters: {
+							contract: 'AUTO'
+						}
+					});
+				} else if (message.state === 'UNAUTHORIZED') {
+					console.error('Authentication failed - invalid token');
+					this.onStatusCallback?.(false, 'Authentication failed');
+				} else {
+					console.log('Auth state:', message.state);
+				}
 				break;
 
 			case 'CHANNEL_OPENED':
@@ -137,7 +179,7 @@ export class StreamingMarketDataService {
 				this.isFeedConfigured = true;
 				this.onStatusCallback?.(true);
 				this.startKeepalive();
-				
+
 				// Subscribe to any pending symbols
 				if (this.pendingSymbols.length > 0) {
 					console.log('Subscribing to pending symbols:', this.pendingSymbols);
@@ -298,8 +340,10 @@ export class StreamingMarketDataService {
 
 	private sendMessage(message: Record<string, unknown>): void {
 		if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-			console.log('Sending message:', message);
+			console.log('SENDING:', message.type, message);
 			this.ws.send(JSON.stringify(message));
+		} else {
+			console.error('Cannot send message, WebSocket not open:', this.ws?.readyState);
 		}
 	}
 
@@ -320,6 +364,7 @@ export class StreamingMarketDataService {
 	}
 
 	private cleanup(): void {
+		console.log(`[${this.instanceId}] cleanup() called - clearing token and connection state`);
 		if (this.keepaliveInterval) {
 			clearInterval(this.keepaliveInterval);
 			this.keepaliveInterval = null;
@@ -335,6 +380,8 @@ export class StreamingMarketDataService {
 		this.isSetupComplete = false;
 		this.isAuthorized = false;
 		this.isFeedConfigured = false;
+		this.quoteToken = null; // Clear the token
+		this.dxlinkUrl = null;
 		this.onStatusCallback?.(false);
 	}
 

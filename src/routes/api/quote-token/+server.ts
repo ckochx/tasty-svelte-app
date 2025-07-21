@@ -18,6 +18,14 @@ export const GET: RequestHandler = async ({ cookies }) => {
 			return json({ error: 'Failed to fetch quote token' }, { status: 500 });
 		}
 
+		console.log(
+			'Quote token from server:',
+			quoteToken['api-quote-token']
+				? `${quoteToken['api-quote-token'].substring(0, 20)}...`
+				: 'NULL/UNDEFINED'
+		);
+		console.log('DXLink URL from server:', quoteToken['dxlink-url']);
+
 		return json({
 			success: true,
 			data: quoteToken

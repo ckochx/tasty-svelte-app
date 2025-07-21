@@ -207,7 +207,9 @@
 		{#if data.watchlists && data.watchlists.length > 0}
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
 				{#each data.watchlists as watchlist (watchlist.name)}
-					<div class="relative overflow-hidden rounded-lg bg-white shadow transition-shadow hover:shadow-lg">
+					<div
+						class="relative overflow-hidden rounded-lg bg-white shadow transition-shadow hover:shadow-lg"
+					>
 						<a href="/watchlists/{encodeURIComponent(watchlist.name)}" class="block h-full">
 							<div class="border-b border-gray-200 px-4 py-4 sm:px-6">
 								<div class="flex items-center justify-between">
@@ -308,7 +310,7 @@
 									e.preventDefault();
 									toggleAddSymbolForm(watchlist.name);
 								}}
-								class="rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 shadow-sm"
+								class="rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white shadow-sm hover:bg-green-700"
 							>
 								Add Symbol
 							</button>
@@ -324,7 +326,7 @@
 										}
 										e.target.closest('form').submit();
 									}}
-									class="rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 shadow-sm"
+									class="rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white shadow-sm hover:bg-red-700"
 								>
 									Delete
 								</button>
@@ -373,7 +375,6 @@
 								</form>
 							</div>
 						{/if}
-
 					</div>
 				{/each}
 			</div>

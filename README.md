@@ -5,15 +5,15 @@ Everything you need to build a Svelte project, powered by [`sv`](https://github.
 ## Getting setup:
 
 1. Start the database:
-npm run db:start
+   npm run db:start
 2. Set environment variable:
-export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/tasty-app"
-2. Or add it to your .env file:
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tasty-app
-3. Push the schema:
-npm run db:push
-4. Optional: Open Drizzle Studio (database GUI):
-npm run db:studio
+   export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/tasty-app"
+3. Or add it to your .env file:
+   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tasty-app
+4. Push the schema:
+   npm run db:push
+5. Optional: Open Drizzle Studio (database GUI):
+   npm run db:studio
 
 Key Points:
 

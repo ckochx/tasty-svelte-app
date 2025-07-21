@@ -31,6 +31,12 @@ function createStreamingStore() {
 		init: () => {
 			if (typeof window === 'undefined') return; // Server-side guard
 
+			if (streamingService) {
+				console.log('Streaming service already exists, skipping initialization');
+				return;
+			}
+
+			console.log('Creating new streaming service');
 			streamingService = new StreamingMarketDataService();
 
 			// Handle incoming data
@@ -75,7 +81,12 @@ function createStreamingStore() {
 					return false;
 				}
 
-				const { 'api-quote-token': token, 'dxlink-url': url } = result.data;
+				const { token, 'dxlink-url': url } = result.data;
+				console.log(
+					'Token from API response:',
+					token ? `${token.substring(0, 20)}...` : 'NULL/UNDEFINED'
+				);
+				console.log('URL from API response:', url);
 				const success = await streamingService.connect(token, url);
 
 				if (!success) {
