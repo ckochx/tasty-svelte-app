@@ -73,45 +73,55 @@ export class MarketDataManager {
 			return [];
 		}
 
-		// Limit to 100 symbols per API call
-		const limitedSymbols = symbolsWithTypes.slice(0, 100);
-
-		try {
-			// Group symbols by instrument type for the API call
-			const symbolsByType: Record<string, string[]> = {};
-
-			limitedSymbols.forEach(({ symbol, instrumentType }) => {
-				const apiType = this.mapInstrumentType(instrumentType);
-				if (!symbolsByType[apiType]) {
-					symbolsByType[apiType] = [];
+		// Since the API returns single quotes, fetch each symbol individually
+		const quotes: Quote[] = [];
+		
+		for (const { symbol, instrumentType } of symbolsWithTypes) {
+			try {
+				const quote = await this.getSingleQuote(symbol, instrumentType);
+				if (quote) {
+					quotes.push(quote);
 				}
-				symbolsByType[apiType].push(symbol);
-			});
+			} catch (error) {
+				console.error(`Error fetching quote for ${symbol}:`, error);
+				// Continue with other symbols even if one fails
+			}
+		}
 
-			// Build query parameters
+		console.log(`Fetched ${quotes.length} quotes out of ${symbolsWithTypes.length} requested`);
+		return quotes;
+	}
+
+	// Get a single quote from the API
+	private async getSingleQuote(symbol: string, instrumentType: string): Promise<Quote | null> {
+		try {
+			const apiType = this.mapInstrumentType(instrumentType);
 			const params = new URLSearchParams();
-
-			Object.entries(symbolsByType).forEach(([type, symbols]) => {
-				symbols.forEach((symbol) => {
-					params.append(type, symbol);
-				});
-			});
+			params.append(apiType, symbol);
 
 			const response = await this.auth.makeAuthenticatedRequest(
 				`/market-data/by-type?${params.toString()}`
 			);
 
 			if (!response.ok) {
-				console.error('Failed to fetch market data:', response.status);
-				return [];
+				const errorText = await response.text();
+				console.error(`Failed to fetch ${symbol}:`, response.status, errorText);
+				return null;
 			}
 
-			const data: MarketDataResponse = await response.json();
+			const responseText = await response.text();
+			const apiResponse = JSON.parse(responseText);
 
-			return data.data.items || [];
+			if (apiResponse.data && apiResponse.data.symbol) {
+				const mappedQuote = this.mapApiQuoteToQuote(apiResponse.data);
+				return mappedQuote;
+			}
+
+			console.warn(`No data returned for ${symbol}`);
+			return null;
 		} catch (error) {
-			console.error('Error fetching market data:', error);
-			return [];
+			console.error(`Error fetching quote for ${symbol}:`, error);
+			return null;
 		}
 	}
 
@@ -121,11 +131,38 @@ export class MarketDataManager {
 		return quotes.length > 0 ? quotes[0] : null;
 	}
 
+	// Map API response fields to our Quote interface
+	private mapApiQuoteToQuote(apiQuote: any): Quote {
+		return {
+			symbol: apiQuote.symbol,
+			'instrument-type': apiQuote['instrument-type'] || 'Equity',
+			'bid-price': parseFloat(apiQuote.bid) || undefined,
+			'ask-price': parseFloat(apiQuote.ask) || undefined,
+			'last-price': parseFloat(apiQuote.last) || undefined,
+			'bid-size': apiQuote['bid-size'] || undefined,
+			'ask-size': apiQuote['ask-size'] || undefined,
+			'day-high': parseFloat(apiQuote['day-high-price']) || undefined,
+			'day-low': parseFloat(apiQuote['day-low-price']) || undefined,
+			'close-price': parseFloat(apiQuote.close) || parseFloat(apiQuote['prev-close']) || undefined,
+			'open-price': parseFloat(apiQuote.open) || undefined,
+			'mark-price': parseFloat(apiQuote.mark) || undefined,
+			'updated-at': apiQuote['updated-at'] || undefined,
+			// Calculate net change if we have last and prev-close
+			'net-change': apiQuote.last && apiQuote['prev-close'] 
+				? parseFloat(apiQuote.last) - parseFloat(apiQuote['prev-close']) 
+				: undefined,
+			// Calculate percentage change
+			'net-change-percent': apiQuote.last && apiQuote['prev-close'] 
+				? ((parseFloat(apiQuote.last) - parseFloat(apiQuote['prev-close'])) / parseFloat(apiQuote['prev-close'])) * 100
+				: undefined
+		};
+	}
+
 	// Map our instrument types to API parameter names
 	private mapInstrumentType(instrumentType: string): string {
 		switch (instrumentType) {
 			case 'Equity':
-				return 'equity';
+				return 'symbol'; // Back to 'symbol' (singular) - this was working
 			case 'Equity Option':
 				return 'equity-option';
 			case 'Future':
@@ -135,7 +172,7 @@ export class MarketDataManager {
 			case 'Cryptocurrency':
 				return 'cryptocurrency';
 			default:
-				return 'equity'; // Default fallback
+				return 'symbol'; // Default fallback
 		}
 	}
 
