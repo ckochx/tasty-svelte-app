@@ -195,7 +195,7 @@ export class StreamingMarketDataService {
 
 			case 'KEEPALIVE':
 				// Respond to keepalive
-				this.sendMessage({ type: 'KEEPALIVE' });
+				this.sendMessage({ type: 'KEEPALIVE', channel: 0 });
 				break;
 
 			case 'ERROR':
@@ -333,7 +333,7 @@ export class StreamingMarketDataService {
 	private startKeepalive(): void {
 		this.keepaliveInterval = setInterval(() => {
 			if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-				this.sendMessage({ type: 'KEEPALIVE' });
+				this.sendMessage({ type: 'KEEPALIVE', channel: 0 });
 			}
 		}, 30000); // Send keepalive every 30 seconds
 	}
